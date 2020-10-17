@@ -1,56 +1,52 @@
-import { useEffect, useState } from "react";
+import {
+  Suspense,
+  unstable_SuspenseList as SuspenseList,
+  useEffect,
+  useState,
+} from "react";
 import { Spinner } from "./Spinner";
-import { fetchCatList, fetchCatImage } from "./utils/catApi";
+import { createCatListResource, createCatImageResource } from "./utils/catApi";
 
 export function SuspendedCatPage() {
   return (
     <div style={{ marginTop: "2em" }}>
-      <CatList />
+      <Suspense fallback={<Spinner />}>
+        <CatList />
+      </Suspense>
     </div>
   );
 }
 
+const catListResource = createCatListResource();
+
 function CatList() {
-  const [loading, setLoading] = useState(false);
-  const [cats, setCats] = useState(null);
-
+  const cats = catListResource.read();
+  const [catImageResources, setCatImageResources] = useState([]);
   useEffect(() => {
-    if (!loading && !cats) {
-      setLoading(true);
-      fetchCatList().then((data) => {
-        setCats(data);
-        setLoading(false);
-      });
-    }
-  }, [loading, cats]);
+    setCatImageResources(
+      cats.map((cat) => ({
+        cat,
+        resource: createCatImageResource(cat.url),
+      }))
+    );
+  }, [cats]);
 
-  if (loading || !cats) {
-    return <Spinner />;
-  }
-  return cats.map((cat) => <CatRow key={cat.id} cat={cat} />);
+  return (
+    <SuspenseList revealOrder="forwards" tail="collapsed">
+      {catImageResources.map(({ cat, resource }) => {
+        resource.preload();
+        return (
+          <Suspense fallback={<Spinner />}>
+            <CatRow key={cat.id} resource={resource} />
+          </Suspense>
+        );
+      })}
+    </SuspenseList>
+  );
 }
 
-function CatRow({ cat }) {
-  const [loading, setLoading] = useState(false);
-  const [imageElement, setImageElement] = useState(null);
-
-  useEffect(() => {
-    if (!loading && !imageElement) {
-      setLoading(true);
-      fetchCatImage(cat.url).then((img) => {
-        setImageElement(img);
-        setLoading(false);
-      });
-    }
-  }, [loading, imageElement]);
-
-  if (loading || !imageElement) {
-    return (
-      <div>
-        <Spinner />
-      </div>
-    );
-  }
+function CatRow({ resource }) {
+  const imageElement = resource.read();
   return (
     <div style={{ display: "flex" }}>
       <img src={imageElement.src} alt="cat" style={{ maxHeight: 90 }} />
